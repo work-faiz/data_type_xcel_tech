@@ -20,11 +20,26 @@
 ####################################
 # main.py
 from fastapi import FastAPI, UploadFile, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware 
 import cv2
 import pytesseract
 import numpy as np
 
 app = FastAPI()
+
+# 2. Define the list of allowed origins
+# For development, "*" is okay. For production, you should be more specific.
+# e.g., origins = ["https://your-frontend-domain.com", "http://localhost:3000"]
+origins = ["https://datacopyxcel.netlify.app"]
+
+# 3. Add the CORSMiddleware to the app
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Allows all methods
+    allow_headers=["*"], # Allows all headers
+)
 
 @app.get("/")
 def read_root():
