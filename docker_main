@@ -7,7 +7,9 @@ FROM python:3.9-slim
 WORKDIR /code
 
 # 3. Install Tesseract-OCR and other system dependencies
-RUN apt-get update && apt-get install -y tesseract-ocr libgl1-mesa-glx
+RUN apt-get update && \
+    apt-get install -y tesseract-ocr libgl1-mesa-glx && \
+    rm -rf /var/lib/apt/lists/*
 
 # 4. Copy the requirements file into the container
 COPY ./requirements.txt /code/requirements.txt
