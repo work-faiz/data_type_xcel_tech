@@ -16,7 +16,7 @@ COPY ./requirements.txt /code/requirements.txt
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
 # 6. Copy the application code into the container
-COPY ./google_collab.py /code/google_collab.py
+COPY ./main.py /code/main.py
 
 # 7. Command to run the application
-CMD ["uvicorn", "google_collab:app", "--host", "0.0.0.0", "--port", "80"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]

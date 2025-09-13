@@ -1,121 +1,66 @@
-import requests
+# import pytesseract
+# import cv2
+
+
+# # Assuming only one file is uploaded, get the filename
+# filename = r"C:\Users\windows\Downloads\img data\CoVdeMO.jpeg"
+
+# # Read the image using OpenCV
+# img = cv2.imread(filename)
+
+# # Convert the image to grayscale
+# gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+# # Use pytesseract to extract text
+# text = pytesseract.image_to_string(gray_img)
+
+# # Print the extracted text
+# print(text)
+
+####################################
+# main.py
+from fastapi import FastAPI, UploadFile, HTTPException, status
 import cv2
+import pytesseract
 import numpy as np
-import re
-import json
-from PIL import Image
-from io import BytesIO
-from transformers import (
-    TrOCRProcessor,
-    VisionEncoderDecoderModel,
-    DonutProcessor,
-)
 
-# --- Reusable Pre-processing Function ---
-def preprocess_image_for_ocr(image_url: str) -> Image.Image:
-    """
-    Fetches an image from a URL and applies adaptive thresholding to optimize it for OCR.
-    Returns a processed PIL Image.
-    """
-    # response = requests.get(image_url)
-    # original_image = Image.open(BytesIO(response.content)).convert("RGB")
-    original_image = Image.open(image_url).convert("RGB")
-    
-    # Convert to OpenCV format (grayscale)
-    cv_image = cv2.cvtColor(np.array(original_image), cv2.COLOR_RGB2GRAY)
-    
-    # Apply adaptive thresholding to get a clean black & white image
-    processed_cv_image = cv2.adaptiveThreshold(
-        cv_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-    )
-    
-    # Convert back to a PIL Image
-    return Image.fromarray(processed_cv_image)
+app = FastAPI()
 
-# --- Model Function 1: Microsoft TrOCR for Raw Text Extraction ---
-def extract_text_with_trocr(image_url: str) -> str:
-    """
-    Performs OCR using TrOCR on a pre-processed image to get a raw text dump.
-    Best for unstructured text like paragraphs, signs, or labels.
-    """
+@app.get("/")
+def read_root():
+  return {"message": "FastAPI application is running"}
+
+@app.post("/extract_text/")
+async def extract_text_from_image(image: UploadFile):
+    # Validate file type
+    # if not image.content_type or not image.content_type.startswith("image/"):
+    #     raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Invalid file type. Please upload an image.")
+
     try:
-        # Get the cleaned, high-contrast image
-        processed_pil_image = preprocess_image_for_ocr(image_url)
-        processed_pil_image_rgb = processed_pil_image.convert("RGB") 
-        
-        # Load model and processor
-        processor = TrOCRProcessor.from_pretrained('microsoft/trocr-base-printed')
-        model = VisionEncoderDecoderModel.from_pretrained('microsoft/trocr-base-printed')
+        # Read the image content
+        image_bytes = await image.read()
+        nparr = np.frombuffer(image_bytes, np.uint8)
 
-        pixel_values = processor(images=processed_pil_image_rgb, return_tensors="pt").pixel_values
-        generated_ids = model.generate(pixel_values)
-        
-        extracted_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        return extracted_text
+        # Decode the image using OpenCV
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+        # Check if image decoding was successful
+        if img is None:
+             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not decode image.")
+
+        # Convert the image to grayscale
+        gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Use pytesseract to extract text
+        text = pytesseract.image_to_string(gray_img)
+
+        return {"extracted_text": text}
     except Exception as e:
-        return f"An error occurred with TrOCR: {e}"
-
-# --- Model Function 2: Naver Donut for Structured Data Extraction ---
-def extract_structured_data_with_donut(image_url: str) -> dict:
-    """
-    Performs OCR using Donut on a pre-processed image to get structured JSON data.
-    Best for documents like receipts, invoices, or forms.
-    """
-    try:
-        # Get the cleaned, high-contrast image
-        processed_pil_image = preprocess_image_for_ocr(image_url)
-        
-        # Donut's processor expects an RGB image
-        processed_pil_image_rgb = processed_pil_image.convert("RGB")
-        
-        # Load model and processor
-        processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
-        model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
-
-        task_prompt = "<s_cord-v2>"
-        decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
-
-        pixel_values = processor(processed_pil_image_rgb, return_tensors="pt").pixel_values
-        
-        outputs = model.generate(
-            pixel_values,
-            decoder_input_ids=decoder_input_ids,
-            max_length=model.decoder.config.max_position_embeddings,
-            pad_token_id=processor.tokenizer.pad_token_id,
-            eos_token_id=processor.tokenizer.eos_token_id,
-            use_cache=True,
-            bad_words_ids=[[processor.tokenizer.unk_token_id]],
-            return_dict_in_generate=True,
-        )
-
-        sequence = processor.batch_decode(outputs.sequences)[0]
-        sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
-        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()
-        
-        return processor.token2json(sequence)
-
-    except Exception as e:
-        return f"An error occurred with Donut: {e}"
-
-# --- Main Execution Block ---
-# This part of the script runs when you execute it directly.
-if __name__ == "__main__":
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred during text extraction: {e}")
     
-    # URL of a structured document (a receipt)
-    image_url = 'https://huggingface.co/datasets/naver-clova-ix/cord-v2/resolve/main/images/train/train_00001.png'
-    
-    print(f"Processing image from: {image_url}\n")
-    
-    # --- Situation 1: You need all text as a single block ---
-    print("--- Calling TrOCR for Raw Text Extraction ---")
-    raw_text = extract_text_with_trocr(image_url)
-    print(raw_text)
-    
-    print("\n" + "="*50 + "\n")
-    
-    # --- Situation 2: You need to parse the document into key-value pairs ---
-    print("--- Calling Donut for Structured Data Extraction ---")
-    structured_data = extract_structured_data_with_donut(image_url)
-    # Pretty-print the JSON output
-    print(json.dumps(structured_data, indent=4))
+
+# To run the app, use the command:
+if "__main__" == __name__:
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+# uvicorn main:app --reload --host 0.0.0.0 --port 8000
