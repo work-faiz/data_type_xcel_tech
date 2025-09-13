@@ -1,7 +1,5 @@
-# fly.toml app configuration file generated for data-type-xcel-tech on 2025-09-13T10:24:46+05:30
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# fly.toml app configuration file for data-type-xcel-tech
+# See https://fly.io/docs/reference/configuration/ for information
 
 app = 'data-type-xcel-tech'
 primary_region = 'bom'
@@ -9,11 +7,15 @@ primary_region = 'bom'
 [build]
 
 [http_service]
-  internal_port = 8000
+  # IMPORTANT: Changed this from 8000 to 80 to match your Dockerfile.
+  internal_port = 80
   force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
+
+  # IMPORTANT: Set to 1 to keep the app running 24/7 and prevent sleeping.
+  min_machines_running = 1
+  
+  # The auto_stop and auto_start settings are not needed when min_machines_running is 1.
+  
   processes = ['app']
 
 [[vm]]
